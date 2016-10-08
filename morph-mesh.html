@@ -15,11 +15,30 @@
             background-color: #333;
         }
 
-        #time {
+        input[type='range']:focus {
+            outline: none;
+        }
+
+        input[type='range'] {
             position: absolute;
-            top: 1em;
-            width: 100%;
-            height: 32px;
+            z-index: 50;
+            top: 30px;
+            left: 30%;
+            width: 40%;
+            height: 24px;
+            padding: 3px;
+            -webkit-appearance: none;
+            border-radius: 15px;
+            border: 1px solid #525252;
+            background-color: #222;
+        }
+
+        input[type='range']::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            width: 34px;
+            height: 22px;
+            border-radius: 10px;
+            background-color: white;
         }
     </style>
 </head>
@@ -131,17 +150,12 @@
 
     function createSlider() {
         var slider = document.createElement("input");
+        slider.setAttribute('id', "timer");
         slider.setAttribute('type', "range");
         slider.setAttribute('min', 0);
         slider.setAttribute('max', 1);
         slider.setAttribute('step', 0.01);
         slider.setAttribute('value', 0);
-
-        slider.style.position = "absolute";
-        slider.style.top = "30px";
-        slider.style.left = "35%";
-        slider.style.width = "30%";
-        slider.style.zIndex = "1";
         document.body.appendChild(slider);
 
         return slider;
