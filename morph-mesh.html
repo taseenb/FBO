@@ -1,0 +1,268 @@
+<!DOCTYPE html>
+<html>
+<head lang="en">
+    <meta charset="UTF-8">
+    <title>FBO</title>
+    <style>
+        head, body {
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            top: 0;
+            left: 0;
+            margin: 0;
+            padding: 0;
+            background-color: #333;
+        }
+
+        #time {
+            position: absolute;
+            top: 1em;
+            width: 100%;
+            height: 32px;
+        }
+    </style>
+</head>
+<body>
+
+<script src="vendor/three.min.js"></script>
+<script src="vendor/BinaryLoader.js"></script>
+<script src="vendor/OrbitControls.js"></script>
+<script src="ShaderLoader.js"></script>
+<script src="fbo.js"></script>
+
+<!--<input id="time"type="range" min="0" max="1" step="0.001" >-->
+
+<script>
+    var scene, camera, renderer;
+    var simulationShader, renderShader;
+    var blendings, blendingIdx;
+
+    // Texture size should be large enough to contain all the vertices of each model.
+    // All extra vertices will be hidden (alpha = 0).
+    var textureSize = 256;
+
+    var slider = createSlider();
+
+    window.onload = function () {
+        var sl = new ShaderLoader();
+        sl.loadShaders({
+            simulation_vs: "",
+            simulation_fs: "",
+            render_vs: "",
+            render_fs: ""
+        }, "./glsl/morph-mesh/", loadMesh);
+    };
+
+    function init(g) {
+        //regular scene creation
+        var w = window.innerWidth;
+        var h = window.innerHeight;
+        renderer = new THREE.WebGLRenderer({
+            alpha: true,
+//            logarithmicDepthBuffer: true,
+        });
+        renderer.setSize(w, h);
+        scene = new THREE.Scene();
+        camera = new THREE.PerspectiveCamera(60, w / h, 1, 10000);
+        camera.position.z = 500;
+        document.body.appendChild(renderer.domElement);
+
+        var width = textureSize;
+        var height = textureSize;
+
+        //first model
+        var dataA = parseMesh(g);
+        var textureA = new THREE.DataTexture(dataA, width, height, THREE.RGBAFormat, THREE.FloatType, THREE.DEFAULT_MAPPING, THREE.RepeatWrapping, THREE.RepeatWrapping);
+        textureA.needsUpdate = true;
+
+        //second model
+        var radius = textureSize * 0.66;
+        var dataB = getSphere(width * height, radius);
+        var textureB = new THREE.DataTexture(dataB, width, height, THREE.RGBAFormat, THREE.FloatType, THREE.DEFAULT_MAPPING, THREE.RepeatWrapping, THREE.RepeatWrapping);
+        textureB.needsUpdate = true;
+
+        console.log(textureA, textureB);
+
+        simulationShader = new THREE.ShaderMaterial({
+            uniforms: {
+                textureA: {type: "t", value: textureA},
+                textureB: {type: "t", value: textureB},
+                timer: {type: "f", value: 0}
+            },
+            vertexShader: ShaderLoader.get("simulation_vs"),
+            fragmentShader: ShaderLoader.get("simulation_fs"),
+        });
+
+        blendings = ["NoBlending", "NormalBlending", "AdditiveBlending", "SubtractiveBlending", "MultiplyBlending"];
+        blendingIdx = 1;
+
+        renderShader = new THREE.ShaderMaterial({
+            uniforms: {
+                positions: {type: "t", value: null},
+                pointSize: {type: "f", value: 1},
+//                nearFar: { type: "v2", value:new THREE.Vector2( 150, 500 ) },
+                alpha: {type: "f", value: 0.66},
+            },
+            vertexShader: ShaderLoader.get("render_vs"),
+            fragmentShader: ShaderLoader.get("render_fs"),
+            transparent: true,
+            blending: THREE[blendings[blendingIdx]],
+        });
+
+        FBO.init(width, height, renderer, simulationShader, renderShader);
+        scene.add(FBO.particles);
+
+        window.addEventListener("resize", onResize);
+        onResize();
+        update();
+
+        // Cycle through blending modes
+        document.addEventListener('keydown', function (e) {
+            if (e.which === 32) { // spacebar
+                blendingIdx++;
+                if (blendingIdx >= blendings.length) {
+                    blendingIdx = 0;
+                }
+                console.log(blendings[blendingIdx]);
+            }
+        });
+    }
+
+    function createSlider() {
+        var slider = document.createElement("input");
+        slider.setAttribute('type', "range");
+        slider.setAttribute('min', 0);
+        slider.setAttribute('max', 1);
+        slider.setAttribute('step', 0.01);
+        slider.setAttribute('value', 0);
+
+        slider.style.position = "absolute";
+        slider.style.top = "30px";
+        slider.style.left = "35%";
+        slider.style.width = "30%";
+        slider.style.zIndex = "1";
+        document.body.appendChild(slider);
+
+        return slider;
+    }
+
+    //returns a Float32Array buffer of random 3D coordinates
+    //    function getRandomData(width, height, size) {
+    //        var len = width * height * 3;
+    //        var data = new Float32Array(len);
+    //        while (len--)data[len] = ( Math.random() - .5 ) * size;
+    //        return data;
+    //    }
+
+
+    /**
+     * Cube root function (and polyfill).
+     * See: https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Math/cbrt
+     **/
+    Math.cbrt = Math.cbrt || function (x) {
+                var y = Math.pow(Math.abs(x), 1 / 3);
+                return x < 0 ? -y : y;
+            };
+    function getPoint(v, radius) {
+        var phi = Math.random() * 2 * Math.PI;
+        var costheta = Math.random() * 2 - 1;
+        var u = Math.random();
+
+        var theta = Math.acos(costheta);
+        var r = radius * Math.cbrt(u);
+
+        v.x = r * Math.sin(theta) * Math.cos(phi);
+        v.y = r * Math.sin(theta) * Math.sin(phi);
+        v.z = r * Math.cos(theta);
+        return v;
+    }
+
+    function getSphere(count, radius) {
+        var len = count * 4;
+        var data = new Float32Array(len);
+        var p = new THREE.Vector4();
+        for (var i = 0; i < len; i += 4) {
+            getPoint(p, radius);
+            data[i] = p.x;
+            data[i + 1] = p.y;
+            data[i + 2] = p.z;
+            data[i + 3] = 1; // alpha // Math.random();
+        }
+        return data;
+    }
+
+    function loadMesh() {
+        var bl = new THREE.BinaryLoader();
+        bl.load("model/bust.js", init);
+    }
+
+    /**
+     * Create an Float32Array with the size of the texture and push all the vertices of the 3D mesh.
+     * Each vertex will be represented in RGBA format (so it requires 4 values: xyz + alpha).
+     * When vertices are over, fill the remaining array positions with
+     * random values and hide those extra points by setting the alpha value to 0.
+     *
+     * NOTE: hidden points (with alpha 0) must be drawn first, so they must be at the
+     * beginning of the array! Otherwise you will see black dots, instead of transparent.
+     * See the problem here: https://en.wikipedia.org/wiki/Painter%27s_algorithm
+     *
+     * @param g The mesh data.
+     * @returns {Float32Array} An array of floats, based on RGBA format, that can be used as data in a DataTexture.
+     */
+    function parseMesh(g) {
+        var vertices = g.vertices;
+        var verticesCount = vertices.length;
+        var radius = textureSize / 2;
+        var textureArea = textureSize * textureSize;
+        var data = new Float32Array(textureArea * 4);
+//        var dataLength = data.length;
+
+        var hiddenPoints = textureArea - verticesCount;
+
+        for (var i = 0; i < textureArea; i++) {
+            if (hiddenPoints > i) {
+                data[i * 4] = -radius + Math.random() * textureSize;
+                data[i * 4 + 1] = -radius + Math.random() * textureSize;
+                data[i * 4 + 2] = -radius + Math.random() * textureSize;
+                data[i * 4 + 3] = 0; // alpha
+            } else {
+                data[i * 4] = vertices[i - hiddenPoints].x;
+                data[i * 4 + 1] = vertices[i - hiddenPoints].y;
+                data[i * 4 + 2] = vertices[i - hiddenPoints].z;
+                data[i * 4 + 3] = 1; // alpha
+            }
+        }
+
+        return data;
+    }
+
+    function onResize() {
+        var w = window.innerWidth;
+        var h = window.innerHeight;
+        renderer.setSize(w, h);
+        camera.aspect = w / h;
+        camera.updateProjectionMatrix();
+    }
+
+
+    function update() {
+        requestAnimationFrame(update);
+
+        //update params
+        simulationShader.uniforms.timer.value = parseFloat(slider.value);
+        renderShader.blending = THREE[blendings[blendingIdx]];
+
+        FBO.particles.rotation.y -= Math.PI / 180 * .3;
+
+        //update simulation
+        FBO.update();
+
+        //render the particles at the new location
+        renderer.render(scene, camera);
+
+    }
+</script>
+
+</body>
+</html>

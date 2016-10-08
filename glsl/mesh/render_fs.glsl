@@ -1,4 +1,5 @@
 uniform vec2 nearFar;
+
 varying float size;
 #ifdef USE_LOGDEPTHBUF
 	uniform float logDepthBufFC;
@@ -6,6 +7,8 @@ varying float size;
 		varying float vFragDepth;
 	#endif
 #endif
+
+
 void main()
 {
 

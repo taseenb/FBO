@@ -25,7 +25,7 @@ var FBO = function( exports ){
         var options = {
             minFilter: THREE.NearestFilter,//important as we want to sample square pixels
             magFilter: THREE.NearestFilter,//
-            format: THREE.RGBFormat,//could be RGBAFormat
+            format: THREE.RGBAFormat,//could be RGBFormat
             type:THREE.FloatType//important as we need precise coordinates (not ints)
         };
         rtt = new THREE.WebGLRenderTarget( width,height, options);
@@ -41,10 +41,9 @@ var FBO = function( exports ){
 
         //6 the particles:
         //create a vertex buffer of size width * height with normalized coordinates
-        var l = (width * height );
+        var l = (width * height);
         var vertices = new Float32Array( l * 3 );
         for ( var i = 0; i < l; i++ ) {
-
             var i3 = i * 3;
             vertices[ i3 ] = ( i % width ) / width ;
             vertices[ i3 + 1 ] = ( i / width ) / height;
